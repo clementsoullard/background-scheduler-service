@@ -2,7 +2,7 @@ prefix=/usr/local
 
 all: scheduler
 	
-aSimpleSignal: scheduler.o
+scheduler: scheduler.o
 	$(CXX) $+ -o $@ -lwiringPi
 
 install: scheduler
