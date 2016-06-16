@@ -103,15 +103,20 @@ int main (int argc, char** argv)
  lcd_init();
  SetChrMode();
 int nbSecond=getCoundownValue();
-time_t before = time(NULL);
+//time_t before = time(NULL);
 time_t whenItsComplete = time(NULL)+nbSecond;
 int remainingSeconds;
 char timestr[7];
 do {
+nbSecond=getCoundownValue();
+if(nbSecond>0){
+whenItsComplete = time(NULL)+nbSecond;
+}
+
 remainingSeconds=whenItsComplete-time(NULL);
 int seconds=remainingSeconds%60;
+int hours=remainingSeconds/3600;
 int minutes=remainingSeconds/60%60;
-int hours=minutes/60;
 sleep(1);
 sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
 goHome();
@@ -125,32 +130,15 @@ Get coundown value.
 */
 
 int getCoundownValue(){
-int nbSecond=0;
-// Read the content of the directory /tmp/scheduler
-DIR           *d;
-struct dirent *dir;
-char dirname[]="/tmp/scheduler";
-d = opendir(dirname);
-
-// Iterates on the files
-if (d)
- {
-  while ((dir = readdir(d)) != NULL)
-   {
-
-// if the file starts with CD then it is a countdown.
-
-if (strstr(dir->d_name, "CD") != NULL) {
-    printf("Countdown %s\n", dir->d_name);
+int nbSecond=-1;
 
 // read the content of the file
 char * buffer = 0;
 long length;
-char filename[255];
-sprintf(filename,"%s/%s",dirname,dir->d_name);
+char filename[]="/tmp/scheduler/CD";
 
 FILE * f=fopen (filename, "rb");
-printf("Testing %s\n",filename);
+
 if (f)
 {
   fseek (f, 0, SEEK_END);
@@ -165,16 +153,11 @@ if (f)
   }
   fclose (f);
 }
-
+unlink (filename);
 if (buffer)
 {
  printf(buffer);  // start to process your data / extract strings here...
 }
-
-}
-  }
-    closedir(d);
- }
- 	 return nbSecond;
+ return nbSecond;
 
 }
