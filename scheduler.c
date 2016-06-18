@@ -12,6 +12,8 @@
 #define LCD_D5 25
 #define LCD_D6 21
 #define LCD_D7 26
+#define RELAY_IN 7
+
 // LCD instructions 
 #define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
 #define lcd_Home 0b00000010 // return cursor to first position on first line 
@@ -84,6 +86,8 @@ void lcd_init()
 	pinMode (LCD_D5, OUTPUT);
 	pinMode (LCD_D6, OUTPUT);
 	pinMode (LCD_D7, OUTPUT);
+	pinMode (RELAY_IN, OUTPUT);
+	
 
 	// initialise LCD
 	SetCmdMode(); // set for commands
@@ -146,10 +150,16 @@ int main (int argc, char** argv)
 
 		if(nbSecond==-2){
 			goHome();
+			printf("Fermeture du relai %i\n",HIGH);
+			pinMode (RELAY_IN, OUTPUT);
+		//	digitalWrite (RELAY_IN, HIGH) ;
 			lcd_text("Tele on      " );
 		}
 		else if(nbSecond==-1){
 			goHome();
+			pinMode (RELAY_IN, INPUT);
+		// digitalWrite (RELAY_IN, LOW) ;
+				printf("Ouverture du relai %i\n",LOW);
 			lcd_text("Tele off      " );
 		}
 
@@ -193,12 +203,8 @@ int getCoundownValue(){
 		}
 		fclose (f);
 	}
-	if(f){
+	if(f&&nbSecond>0){
 		unlink (filename);
-	}
-	if (buffer)
-	{
-		printf(buffer);  // start to process your data / extract strings here...
 	}
 	return nbSecond;
 }
