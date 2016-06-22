@@ -13,6 +13,8 @@
 #define LCD_D6 21
 #define LCD_D7 26
 #define RELAY_IN 7
+#define IS_CLOSED -1
+#define IS_OPEN 1
 
 // LCD instructions 
 #define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
@@ -23,6 +25,10 @@
 #define lcd_FunctionReset 0b00110000 // reset the LCD 
 #define lcd_FunctionSet4bit 0b00101000 // 4-bit data, 2-line display, 5 x 7 font 
 #define lcd_SetCursor 0b10000000 // set cursor position 
+/**
+The file name for the countdown
+**/
+char filename[]="/tmp/scheduler/CD";
 
 void pulseEnable ()
 {
@@ -56,6 +62,8 @@ void SetCmdMode()
 {
 	digitalWrite (LCD_RS, 0); // set for commands
 }
+
+
 /**
 To write text on the lcd
 */
@@ -87,8 +95,7 @@ void lcd_init()
 	pinMode (LCD_D6, OUTPUT);
 	pinMode (LCD_D7, OUTPUT);
 	pinMode (RELAY_IN, OUTPUT);
-	
-
+	digitalWrite (RELAY_IN, HIGH) ;
 	// initialise LCD
 	SetCmdMode(); // set for commands
 	lcd_byte(0x33); // full init
@@ -108,6 +115,10 @@ void goHome(){
 	delay(3);        // clear screen is slow!
 }
 
+/**
+
+*/
+int state=IS_OPEN;
 
 /**
 * Program pooling a directory, and doing a scheduling.
@@ -122,18 +133,16 @@ int main (int argc, char** argv)
 
 	time_t whenItsComplete ;
 	char timestr[7];
-
+	pinMode (RELAY_IN, OUTPUT);
 	// Loop checking file
 	while(1){
 		nbSecond=getCoundownValue();
-		//printf("loop while 1\n");
 		// The countdown
 		whenItsComplete = time(NULL)+nbSecond;
 		do {
-			//printf("loop do\n");
 			remainingSeconds=whenItsComplete-time(NULL);
 			if(remainingSeconds>-1){
-			//	printf("if remaining>0\n");
+				openRelay();
 				int seconds=remainingSeconds%60;
 				int hours=remainingSeconds/3600;
 				int minutes=remainingSeconds/60%60;
@@ -142,32 +151,47 @@ int main (int argc, char** argv)
 				goHome();
 				lcd_text(timestr);
 			}
-			else{
+			else if(nbSecond==-3){
 				goHome();
+				closeRelay();
+				//	printf("Remaining %d\n",remainingSeconds);
 				lcd_text("Expire    " );
 			}
 		} while ( remainingSeconds>0&& !isFilePresent() );
 
 		if(nbSecond==-2){
 			goHome();
-			printf("Fermeture du relai %i\n",HIGH);
-			pinMode (RELAY_IN, OUTPUT);
-		//	digitalWrite (RELAY_IN, HIGH) ;
+			openRelay();
 			lcd_text("Tele on      " );
-		}
+			}
 		else if(nbSecond==-1){
-			goHome();
-			pinMode (RELAY_IN, INPUT);
-		// digitalWrite (RELAY_IN, LOW) ;
-				printf("Ouverture du relai %i\n",LOW);
-			lcd_text("Tele off      " );
+		goHome();
+		closeRelay();
+		lcd_text("Tele off      " );
 		}
 
-		sleep(2);
+		sleep(3);
 	}
 }
 
-char filename[]="/tmp/scheduler/CD";
+int openRelay(){
+		if(state != IS_OPEN){
+			pinMode (RELAY_IN, OUTPUT);
+			digitalWrite (RELAY_IN, LOW);
+			state = IS_OPEN;
+			printf("Ouverture du relai %i\n",state);
+}
+		}
+
+int closeRelay(){
+		if(state != IS_CLOSED){
+			pinMode (RELAY_IN, INPUT);
+			digitalWrite (RELAY_IN, HIGH);
+			state = IS_CLOSED;
+			printf("Fermeture du relai %i\n",state);
+			}
+}
+
 
 /**
 * Check if file is present
