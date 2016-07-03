@@ -5,6 +5,8 @@
 #include <dirent.h>
 #include <string.h>
 
+typedef unsigned char uchar;
+typedef unsigned int uint;
 
 #define LCD_E 23
 #define LCD_RS 22
@@ -15,6 +17,10 @@
 #define RELAY_IN 7
 #define IS_CLOSED -1
 #define IS_OPEN 1
+#define ADC_CS 0
+#define ADC_CLK 4
+#define ADC_DIO 2
+
 
 // LCD instructions 
 #define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
@@ -30,12 +36,69 @@ The file name for the countdown
 **/
 char filename[]="/tmp/scheduler/CD";
 
+/**
+Inti the adc converter
+**/
+void adc_init()
+{
+pinMode(ADC_CS, OUTPUT);
+pinMode(ADC_CLK, OUTPUT);
+}
+
+/**
+* Lecteur de valuer sur l'adc.
+**/
+uchar get_ADC_Result(void)
+{
+uchar i;
+uchar dat1=0, dat2=0;
+
+digitalWrite(ADC_CS, 0);
+digitalWrite(ADC_CLK,0);
+digitalWrite(ADC_DIO,1); delayMicroseconds(2);
+digitalWrite(ADC_CLK,1); delayMicroseconds(2);
+
+digitalWrite(ADC_CLK,0);
+digitalWrite(ADC_DIO,1); delayMicroseconds(2);
+digitalWrite(ADC_CLK,1); delayMicroseconds(2);
+
+digitalWrite(ADC_CLK,0);
+digitalWrite(ADC_DIO,0); delayMicroseconds(2);
+digitalWrite(ADC_CLK,1);
+digitalWrite(ADC_DIO,1); delayMicroseconds(2);
+digitalWrite(ADC_CLK,0);
+digitalWrite(ADC_DIO,1); delayMicroseconds(2);
+
+for(i=0;i<8;i++)
+{
+digitalWrite(ADC_CLK,1); delayMicroseconds(2);
+digitalWrite(ADC_CLK,0); delayMicroseconds(2);
+
+pinMode(ADC_DIO, INPUT);
+dat1=dat1<<1 | digitalRead(ADC_DIO);
+}
+
+for(i=0;i<8;i++)
+{
+dat2 = dat2 | ((uchar)(digitalRead(ADC_DIO))<<i);
+digitalWrite(ADC_CLK,1); delayMicroseconds(2);
+digitalWrite(ADC_CLK,0); delayMicroseconds(2);
+}
+
+digitalWrite(ADC_CS,1);
+
+return(dat1==dat2) ? dat1 : 0;
+}
+
 void pulseEnable ()
 {
 	digitalWrite (LCD_E, HIGH) ;
 	delay(0.5); //  1/2 microsecond pause - enable pulse must be > 450ns
 	digitalWrite (LCD_E, LOW) ;
 }
+
+
+
 
 /*
 send a byte to the lcd in two nibbles
@@ -116,7 +179,7 @@ void goHome(){
 }
 
 /**
-
+* If the relay is open or not
 */
 int state=IS_OPEN;
 
@@ -126,6 +189,7 @@ int state=IS_OPEN;
 int main (int argc, char** argv)
 {
 	lcd_init();
+	adc_init();
 	SetChrMode();
 
 	int nbSecond;
@@ -173,20 +237,25 @@ int main (int argc, char** argv)
 		sleep(3);
 	}
 }
-
+/**
+Opens the relay
+**/
 int openRelay(){
 		if(state != IS_OPEN){
 			pinMode (RELAY_IN, OUTPUT);
-			digitalWrite (RELAY_IN, LOW);
+			digitalWrite (RELAY_IN, HIGH);
 			state = IS_OPEN;
 			printf("Ouverture du relai %i\n",state);
 }
 		}
+/**
+ * Closes the relay
+**/
 
 int closeRelay(){
 		if(state != IS_CLOSED){
 			pinMode (RELAY_IN, INPUT);
-			digitalWrite (RELAY_IN, HIGH);
+			digitalWrite (RELAY_IN, LOW);
 			state = IS_CLOSED;
 			printf("Fermeture du relai %i\n",state);
 			}
@@ -227,8 +296,11 @@ int getCoundownValue(){
 		}
 		fclose (f);
 	}
+		printf("f=%d, nbSecond=%d\n",f,nbSecond);
+	
 	if(f&&nbSecond>0){
-		unlink (filename);
+		printf("Suppression du fichier\n");
+		remove (filename);
 	}
 	return nbSecond;
 }
