@@ -14,13 +14,19 @@ typedef unsigned int uint;
 #define LCD_D5 25
 #define LCD_D6 21
 #define LCD_D7 26
-#define RELAY_IN 7
+#define RELAY_IN 1
+#define RELAY_IN2 7
 #define IS_CLOSED -1
 #define IS_OPEN 1
 #define ADC_CS 0
 #define ADC_CLK 4
 #define ADC_DIO 2
 
+#define TV_OFF -1
+#define TV_ON -2
+#define NO_FILE -3
+#define PAUSE -4
+#define RESUME -5
 
 // LCD instructions 
 #define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
@@ -35,7 +41,8 @@ typedef unsigned int uint;
 The file name for the countdown
 **/
 char filename[]="/tmp/scheduler/CD";
-
+char filenameStatus[]="/tmp/scheduler/ST";
+void writeStatus(int status);
 /**
 Inti the adc converter
 **/
@@ -48,8 +55,10 @@ pinMode(ADC_CLK, OUTPUT);
 /**
 * Lecteur de valuer sur l'adc.
 **/
-uchar get_ADC_Result(void)
+uchar get_ADC_Result()
 {
+pinMode(ADC_DIO, OUTPUT);
+
 uchar i;
 uchar dat1=0, dat2=0;
 
@@ -96,8 +105,6 @@ void pulseEnable ()
 	delay(0.5); //  1/2 microsecond pause - enable pulse must be > 450ns
 	digitalWrite (LCD_E, LOW) ;
 }
-
-
 
 
 /*
@@ -157,8 +164,8 @@ void lcd_init()
 	pinMode (LCD_D5, OUTPUT);
 	pinMode (LCD_D6, OUTPUT);
 	pinMode (LCD_D7, OUTPUT);
-	pinMode (RELAY_IN, OUTPUT);
-	digitalWrite (RELAY_IN, HIGH) ;
+	pinMode (RELAY_IN, INPUT);
+	//digitalWrite (RELAY_IN, HIGH) ;
 	// initialise LCD
 	SetCmdMode(); // set for commands
 	lcd_byte(0x33); // full init
@@ -188,19 +195,34 @@ int state=IS_OPEN;
 **/
 int main (int argc, char** argv)
 {
-	lcd_init();
 	adc_init();
+	lcd_init();
 	SetChrMode();
 
 	int nbSecond;
 	int remainingSeconds;
-
+	uchar intensity;
+	uchar tmpintensity;
+    int i;
+	int valueInFile;
 	time_t whenItsComplete ;
 	char timestr[7];
 	pinMode (RELAY_IN, OUTPUT);
-	// Loop checking file
+	// Permanent loop checking file.
 	while(1){
-		nbSecond=getCoundownValue();
+		valueInFile=getCoundownValue();
+		if(valueInFile>0||valueInFile>-4){
+			nbSecond=valueInFile;
+		}else if (valueInFile==PAUSE){
+			nbSecond=remainingSeconds;
+			/***
+			In case we are in pause, but not seconds are remaining, then we should remove the file. and set the status to noFile
+			**/
+			if(nbSecond==0){
+				remove (filename);
+				nbSecond=-3;
+			}
+		}
 		// The countdown
 		whenItsComplete = time(NULL)+nbSecond;
 		do {
@@ -214,27 +236,41 @@ int main (int argc, char** argv)
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
 				goHome();
 				lcd_text(timestr);
-			}
-			else if(nbSecond==-3){
+				printf("%s\n",timestr);
+	      }
+			else if(nbSecond==NO_FILE){
 				goHome();
 				closeRelay();
 				//	printf("Remaining %d\n",remainingSeconds);
 				lcd_text("Expire    " );
+				printf("Expire\n");
 			}
-		} while ( remainingSeconds>0&& !isFilePresent() );
+			/**
+			* Block measuring intensity
+			*/
+			/*
+			intensity=0;
+			for(i=0;i<50;i++){
+			tmpintensity=get_ADC_Result();
+			if(tmpintensity>intensity) {
+			intensity=tmpintensity;
+			}
+			}
+			//printf("Intensite: %d\n",intensity);
+   	*/
+	} while ( remainingSeconds>0&& !isFilePresent());
 
-		if(nbSecond==-2){
+		if(nbSecond==TV_ON){
 			goHome();
 			openRelay();
 			lcd_text("Tele on      " );
 			}
-		else if(nbSecond==-1){
-		goHome();
-		closeRelay();
-		lcd_text("Tele off      " );
+		else if(nbSecond==TV_OFF){
+			goHome();
+			closeRelay();
+			lcd_text("Tele off      " );
 		}
-
-		sleep(3);
+			sleep(3);
 	}
 }
 /**
@@ -242,10 +278,11 @@ Opens the relay
 **/
 int openRelay(){
 		if(state != IS_OPEN){
-			pinMode (RELAY_IN, OUTPUT);
+			pinMode (RELAY_IN, INPUT);
 			digitalWrite (RELAY_IN, HIGH);
 			state = IS_OPEN;
-			printf("Ouverture du relai %i\n",state);
+			printf("Open relay\n");
+			writeStatus(1);
 }
 		}
 /**
@@ -254,10 +291,11 @@ int openRelay(){
 
 int closeRelay(){
 		if(state != IS_CLOSED){
-			pinMode (RELAY_IN, INPUT);
+			pinMode (RELAY_IN, OUTPUT);
 			digitalWrite (RELAY_IN, LOW);
 			state = IS_CLOSED;
-			printf("Fermeture du relai %i\n",state);
+			printf("Close relay\n");
+			writeStatus(0);
 			}
 }
 
@@ -296,11 +334,20 @@ int getCoundownValue(){
 		}
 		fclose (f);
 	}
-		printf("f=%d, nbSecond=%d\n",f,nbSecond);
-	
-	if(f&&nbSecond>0){
-		printf("Suppression du fichier\n");
+		printf("valueInfile=%d\n",nbSecond);
+	/**
+	* It the status is resumed
+	*/
+	if(f&&nbSecond>=0||nbSecond==RESUME){
+		printf("Remove file\n");
 		remove (filename);
 	}
 	return nbSecond;
+}
+
+void writeStatus(int status){
+  FILE *f;
+  f = fopen(filenameStatus, "a");
+  fprintf(f, "%d", status);
+  fclose(f);
 }
