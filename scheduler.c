@@ -4,23 +4,15 @@
 #include <time.h>
 #include <dirent.h>
 #include <string.h>
+#include "adc.h"
+#include "lcd.h"
+ //
+ #define PROD
 
-typedef unsigned char uchar;
-typedef unsigned int uint;
 
-#define LCD_E 23
-#define LCD_RS 22
-#define LCD_D4 24
-#define LCD_D5 25
-#define LCD_D6 21
-#define LCD_D7 26
-#define RELAY_IN 1
-#define RELAY_IN2 7
+
 #define IS_CLOSED -1
 #define IS_OPEN 1
-#define ADC_CS 0
-#define ADC_CLK 4
-#define ADC_DIO 2
 
 #define TV_OFF -1
 #define TV_ON -2
@@ -28,162 +20,19 @@ typedef unsigned int uint;
 #define PAUSE -4
 #define RESUME -5
 
-// LCD instructions 
-#define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
-#define lcd_Home 0b00000010 // return cursor to first position on first line 
-#define lcd_EntryMode 0b00000110 // shift cursor from left to right on read/write 
-#define lcd_DisplayOff 0b00001000 // turn display off 
-#define lcd_DisplayOn 0b00001100 // display on, cursor off, don't blink character 
-#define lcd_FunctionReset 0b00110000 // reset the LCD 
-#define lcd_FunctionSet4bit 0b00101000 // 4-bit data, 2-line display, 5 x 7 font 
-#define lcd_SetCursor 0b10000000 // set cursor position 
 /**
 The file name for the countdown
 **/
 char filename[]="/tmp/scheduler/CD";
 char filenameStatus[]="/tmp/scheduler/ST";
 void writeStatus(int status);
-/**
-Inti the adc converter
-**/
-void adc_init()
-{
-pinMode(ADC_CS, OUTPUT);
-pinMode(ADC_CLK, OUTPUT);
-}
 
-/**
-* Lecteur de valuer sur l'adc.
-**/
-uchar get_ADC_Result()
-{
-pinMode(ADC_DIO, OUTPUT);
-
-uchar i;
-uchar dat1=0, dat2=0;
-
-digitalWrite(ADC_CS, 0);
-digitalWrite(ADC_CLK,0);
-digitalWrite(ADC_DIO,1); delayMicroseconds(2);
-digitalWrite(ADC_CLK,1); delayMicroseconds(2);
-
-digitalWrite(ADC_CLK,0);
-digitalWrite(ADC_DIO,1); delayMicroseconds(2);
-digitalWrite(ADC_CLK,1); delayMicroseconds(2);
-
-digitalWrite(ADC_CLK,0);
-digitalWrite(ADC_DIO,0); delayMicroseconds(2);
-digitalWrite(ADC_CLK,1);
-digitalWrite(ADC_DIO,1); delayMicroseconds(2);
-digitalWrite(ADC_CLK,0);
-digitalWrite(ADC_DIO,1); delayMicroseconds(2);
-
-for(i=0;i<8;i++)
-{
-digitalWrite(ADC_CLK,1); delayMicroseconds(2);
-digitalWrite(ADC_CLK,0); delayMicroseconds(2);
-
-pinMode(ADC_DIO, INPUT);
-dat1=dat1<<1 | digitalRead(ADC_DIO);
-}
-
-for(i=0;i<8;i++)
-{
-dat2 = dat2 | ((uchar)(digitalRead(ADC_DIO))<<i);
-digitalWrite(ADC_CLK,1); delayMicroseconds(2);
-digitalWrite(ADC_CLK,0); delayMicroseconds(2);
-}
-
-digitalWrite(ADC_CS,1);
-
-return(dat1==dat2) ? dat1 : 0;
-}
-
-void pulseEnable ()
-{
-	digitalWrite (LCD_E, HIGH) ;
-	delay(0.5); //  1/2 microsecond pause - enable pulse must be > 450ns
-	digitalWrite (LCD_E, LOW) ;
-}
+#define ADC_CS 0
+#define ADC_CLK 4
+#define ADC_DIO 2
 
 
-/*
-send a byte to the lcd in two nibbles
-before calling use SetChrMode or SetCmdMode to determine whether to send character or command
-*/
-void lcd_byte(char bits)
-{
-	digitalWrite (LCD_D4,(bits & 0x10)) ; 
-	digitalWrite (LCD_D5,(bits & 0x20)) ; 
-	digitalWrite (LCD_D6,(bits & 0x40)) ; 
-	digitalWrite (LCD_D7,(bits & 0x80)) ; 
-	pulseEnable();
 
-	digitalWrite (LCD_D4,(bits & 0x1)) ; 
-	digitalWrite (LCD_D5,(bits & 0x2)) ; 
-	digitalWrite (LCD_D6,(bits & 0x4)) ; 
-	digitalWrite (LCD_D7,(bits & 0x8)) ; 
-	pulseEnable();         
-}
-/**
-To pass command to the LCD
-**/
-void SetCmdMode()
-{
-	digitalWrite (LCD_RS, 0); // set for commands
-}
-
-
-/**
-To write text on the lcd
-*/
-void SetChrMode()
-{
-	digitalWrite (LCD_RS, 1); // set for characters
-}
-/**
-Wrtie some text on screen
-**/
-void lcd_text(char *s)
-{
-	while(*s)
-	lcd_byte(*s++);
-}
-/**
-Init the screen
-**/
-void lcd_init()
-{
-
-	// wiringPiSetupGpio () ; // use BCIM numbering
-	wiringPiSetup () ; // use wiring Pi numbering
-	// set up pi pins for output
-	pinMode (LCD_E,  OUTPUT);
-	pinMode (LCD_RS, OUTPUT);
-	pinMode (LCD_D4, OUTPUT);
-	pinMode (LCD_D5, OUTPUT);
-	pinMode (LCD_D6, OUTPUT);
-	pinMode (LCD_D7, OUTPUT);
-	pinMode (RELAY_IN, INPUT);
-	//digitalWrite (RELAY_IN, HIGH) ;
-	// initialise LCD
-	SetCmdMode(); // set for commands
-	lcd_byte(0x33); // full init
-	lcd_byte(0x32); // 4 bit mode
-	lcd_byte(0x28); // 2 line mode
-	lcd_byte(0x0C); // display on, cursor off, blink off
-	lcd_byte(0x01);  // clear screen
-	delay(3);        // clear screen is slow!
-}
-/*
-Return at the begining of the line
-*/
-void goHome(){
-	SetCmdMode(); // set for commands
-	lcd_byte(lcd_Home);  // go home screen
-	SetChrMode();
-	delay(3);        // clear screen is slow!
-}
 
 /**
 * If the relay is open or not
@@ -209,14 +58,20 @@ int main (int argc, char** argv)
 	char timestr[7];
 	pinMode (RELAY_IN, OUTPUT);
 	// Permanent loop checking file.
+	int cycle=0;
 	while(1){
 		valueInFile=getCoundownValue();
 		if(valueInFile>0||valueInFile>-4){
 			nbSecond=valueInFile;
-		}else if (valueInFile==PAUSE){
+		}
+		/**
+		iF a pause is required.
+		**/
+		else if (valueInFile==PAUSE){
 			nbSecond=remainingSeconds;
 			/***
-			In case we are in pause, but not seconds are remaining, then we should remove the file. and set the status to noFile
+			 * In case we are in pause, but not seconds are remaining, 
+			 * then we should remove the file. and set the status to noFile
 			**/
 			if(nbSecond==0){
 				remove (filename);
@@ -226,51 +81,66 @@ int main (int argc, char** argv)
 		// The countdown
 		whenItsComplete = time(NULL)+nbSecond;
 		do {
+			cycle++;
 			remainingSeconds=whenItsComplete-time(NULL);
 			if(remainingSeconds>-1){
 				openRelay();
+				digitalWrite (TRANSISTOR, HIGH);
 				int seconds=remainingSeconds%60;
 				int hours=remainingSeconds/3600;
 				int minutes=remainingSeconds/60%60;
 				sleep(1);
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
+				//printf("Reset LCD ? %d\n",cycle%5);
+				if(cycle%5==0){
+				resetLcd();
+				}
 				goHome();
 				lcd_text(timestr);
+				#ifndef PROD
 				printf("%s\n",timestr);
+				#endif
 	      }
 			else if(nbSecond==NO_FILE){
 				goHome();
 				closeRelay();
-				//	printf("Remaining %d\n",remainingSeconds);
+				//	printf("Remaining %d\n",remainingSeconds);			
 				lcd_text("Expire    " );
+				#ifndef PROD
 				printf("Expire\n");
+				#endif
 			}
 			/**
 			* Block measuring intensity
 			*/
-			/*
-			intensity=0;
-			for(i=0;i<50;i++){
-			tmpintensity=get_ADC_Result();
-			if(tmpintensity>intensity) {
-			intensity=tmpintensity;
-			}
-			}
-			//printf("Intensite: %d\n",intensity);
-   	*/
+			
+			intensity=get_ADC_Result();
+			#ifndef PROD
+			printf("Intensite: %d\n",intensity);
+			#endif
 	} while ( remainingSeconds>0&& !isFilePresent());
-
+		
+		/**
+		* 
+		**/
+		
+		if(cycle%10==0){
+		 resetLcd();
+		}		
 		if(nbSecond==TV_ON){
 			goHome();
 			openRelay();
+			digitalWrite (TRANSISTOR, HIGH);
 			lcd_text("Tele on      " );
 			}
 		else if(nbSecond==TV_OFF){
+			digitalWrite (TRANSISTOR, LOW);
 			goHome();
 			closeRelay();
 			lcd_text("Tele off      " );
 		}
 			sleep(3);
+		cycle++;
 	}
 }
 /**
@@ -281,7 +151,9 @@ int openRelay(){
 			pinMode (RELAY_IN, INPUT);
 			digitalWrite (RELAY_IN, HIGH);
 			state = IS_OPEN;
+				#ifndef PROD
 			printf("Open relay\n");
+				#endif
 			writeStatus(1);
 }
 		}
@@ -294,7 +166,9 @@ int closeRelay(){
 			pinMode (RELAY_IN, OUTPUT);
 			digitalWrite (RELAY_IN, LOW);
 			state = IS_CLOSED;
+				#ifndef PROD
 			printf("Close relay\n");
+				#endif
 			writeStatus(0);
 			}
 }
@@ -334,20 +208,30 @@ int getCoundownValue(){
 		}
 		fclose (f);
 	}
+	#ifndef PROD
 		printf("valueInfile=%d\n",nbSecond);
+	#endif
 	/**
 	* It the status is resumed
 	*/
 	if(f&&nbSecond>=0||nbSecond==RESUME){
+	#ifndef PROD
 		printf("Remove file\n");
+	#endif
 		remove (filename);
 	}
 	return nbSecond;
 }
-
+/**
+Say if the relay is opebn or closed t oan external application by 
+wrtiing it in a file
+**/
 void writeStatus(int status){
   FILE *f;
   f = fopen(filenameStatus, "a");
-  fprintf(f, "%d", status);
-  fclose(f);
+  /** Only write status if the file exists **/
+  if(f){
+   fprintf(f, "%d", status);
+   fclose(f);
+  }
 }

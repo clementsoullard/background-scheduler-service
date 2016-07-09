@@ -1,4 +1,5 @@
 #include <wiringPi.h>
+#include <stdio.h>
 #include "adc.h"
 
 /**
@@ -6,6 +7,7 @@ Init the adc converter
 **/
 void adc_init()
 {
+printf("Initialisation adc");
 pinMode(ADC_CS, OUTPUT);
 pinMode(ADC_CLK, OUTPUT);
 }
@@ -53,6 +55,6 @@ digitalWrite(ADC_CLK,0); delayMicroseconds(2);
 }
 
 digitalWrite(ADC_CS,1);
-
+//printf("dat1: %d, dat2: %d\n");
 return(dat1==dat2) ? dat1 : 0;
 }
