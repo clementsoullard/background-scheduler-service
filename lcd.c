@@ -60,8 +60,6 @@ Init the screen
 void lcd_init()
 {
 
-	// wiringPiSetupGpio () ; // use BCIM numbering
-	wiringPiSetup () ; // use wiring Pi numbering
 	// set up pi pins for output
 	pinMode (LCD_E,  OUTPUT);
 	pinMode (LCD_RS, OUTPUT);
@@ -69,7 +67,8 @@ void lcd_init()
 	pinMode (LCD_D5, OUTPUT);
 	pinMode (LCD_D6, OUTPUT);
 	pinMode (LCD_D7, OUTPUT);
-	pinMode (RELAY_IN, INPUT);
+	pinMode (RELAY_IN, OUTPUT);
+	pinMode (RELAY_IN2, OUTPUT);
 	pinMode (TRANSISTOR, OUTPUT);
 	//digitalWrite (RELAY_IN, HIGH) ;
 	// initialise LCD
@@ -79,7 +78,7 @@ void lcd_init()
 	lcd_byte(0x28); // 2 line mode
 	lcd_byte(0x0C); // display on, cursor off, blink off
 	lcd_byte(0x01);  // clear screen
-	delay(3);        // clear screen is slow!
+	delay(10);        // clear screen is slow!
 }
 /*
 Return at the begining of the line

@@ -6,13 +6,13 @@
 #include <string.h>
 #include "adc.h"
 #include "lcd.h"
- //
- #define PROD
+ // #define PROD
 
 
 
 #define IS_CLOSED -1
 #define IS_OPEN 1
+#define IS_PAUSE 2
 
 #define TV_OFF -1
 #define TV_ON -2
@@ -37,16 +37,20 @@ void writeStatus(int status);
 /**
 * If the relay is open or not
 */
-int state=IS_OPEN;
+int state=0;
 
 /**
 * Program pooling a directory, and doing a scheduling.
 **/
 int main (int argc, char** argv)
 {
+	wiringPiSetup () ; // use wiring Pi numbering
 	adc_init();
 	lcd_init();
 	SetChrMode();
+	/** The status does not exist at the launch of the schduler prgram*/
+	remove (filenameStatus);
+
 
 	int nbSecond;
 	int remainingSeconds;
@@ -76,6 +80,8 @@ int main (int argc, char** argv)
 			if(nbSecond==0){
 				remove (filename);
 				nbSecond=-3;
+			}else{
+				pauseRelay();
 			}
 		}
 		// The countdown
@@ -85,14 +91,14 @@ int main (int argc, char** argv)
 			remainingSeconds=whenItsComplete-time(NULL);
 			if(remainingSeconds>-1){
 				openRelay();
-				digitalWrite (TRANSISTOR, HIGH);
+				digitalWrite (TRANSISTOR, LOW);
 				int seconds=remainingSeconds%60;
 				int hours=remainingSeconds/3600;
 				int minutes=remainingSeconds/60%60;
 				sleep(1);
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
 				//printf("Reset LCD ? %d\n",cycle%5);
-				if(cycle%5==0){
+				if(cycle%30==0){
 				resetLcd();
 				}
 				goHome();
@@ -100,44 +106,57 @@ int main (int argc, char** argv)
 				#ifndef PROD
 				printf("%s\n",timestr);
 				#endif
-	      }
-			else if(nbSecond==NO_FILE){
+	    }
+			/**
+			* Block measuring intensity
+			*/
+			if(cycle%20==0){
+				intensity=get_ADC_Result();
+				#ifndef PROD
+				printf("Intensite: %d\n",intensity);
+				#endif
+			}
+	} while ( remainingSeconds>0&& !isFilePresent());
+		
+		/**
+		* Every 30 ccyle there is a full reset of the screen. Otherwise it is  light reset.
+		**/
+		
+		if(cycle%30==0){
+			lcd_init();
+		}
+		else if (cycle%10==0){
+		 resetLcd();
+		}
+		/**
+		*
+		**/
+			if(nbSecond==NO_FILE){
 				goHome();
 				closeRelay();
 				//	printf("Remaining %d\n",remainingSeconds);			
+				digitalWrite (TRANSISTOR, HIGH);
 				lcd_text("Expire    " );
 				#ifndef PROD
 				printf("Expire\n");
 				#endif
 			}
-			/**
-			* Block measuring intensity
-			*/
-			
-			intensity=get_ADC_Result();
-			#ifndef PROD
-			printf("Intensite: %d\n",intensity);
-			#endif
-	} while ( remainingSeconds>0&& !isFilePresent());
-		
-		/**
-		* 
-		**/
-		
-		if(cycle%10==0){
-		 resetLcd();
-		}		
-		if(nbSecond==TV_ON){
-			goHome();
+			else if(nbSecond==TV_ON){
 			openRelay();
-			digitalWrite (TRANSISTOR, HIGH);
+			digitalWrite (TRANSISTOR, LOW);
+			lcd_init();
+			goHome();
 			lcd_text("Tele on      " );
 			}
 		else if(nbSecond==TV_OFF){
-			digitalWrite (TRANSISTOR, LOW);
-			goHome();
+			digitalWrite (TRANSISTOR, HIGH);
 			closeRelay();
+			lcd_init();
+			goHome();
 			lcd_text("Tele off      " );
+		}
+		else if(nbSecond==RESUME){
+			resumeRelay();
 		}
 			sleep(3);
 		cycle++;
@@ -148,13 +167,13 @@ Opens the relay
 **/
 int openRelay(){
 		if(state != IS_OPEN){
-			pinMode (RELAY_IN, INPUT);
-			digitalWrite (RELAY_IN, HIGH);
+			//pinMode (RELAY_IN, OUTPUT);
+			digitalWrite (RELAY_IN, LOW);
 			state = IS_OPEN;
 				#ifndef PROD
 			printf("Open relay\n");
 				#endif
-			writeStatus(1);
+			writeStatus(state);
 }
 		}
 /**
@@ -163,15 +182,45 @@ int openRelay(){
 
 int closeRelay(){
 		if(state != IS_CLOSED){
-			pinMode (RELAY_IN, OUTPUT);
-			digitalWrite (RELAY_IN, LOW);
+		
+			//pinMode (RELAY_IN, OUTPUT);
+			digitalWrite (RELAY_IN, HIGH);
 			state = IS_CLOSED;
 				#ifndef PROD
 			printf("Close relay\n");
 				#endif
-			writeStatus(0);
+			writeStatus(state);
 			}
 }
+
+/**
+ * Pause the relay
+**/
+
+int pauseRelay(){
+		if(state != IS_PAUSE){
+			state = IS_PAUSE;
+				#ifndef PROD
+			printf("Pause relay\n");
+				#endif
+			writeStatus(state);
+			}
+}
+
+/**
+ * Resume
+**/
+
+int resumeRelay(){
+		if(state == IS_PAUSE){
+			state = IS_OPEN;
+				#ifndef PROD
+			printf("Resume relay\n");
+				#endif
+			writeStatus(state);
+			}
+}
+
 
 
 /**
@@ -218,6 +267,7 @@ int getCoundownValue(){
 	#ifndef PROD
 		printf("Remove file\n");
 	#endif
+		lcd_init();
 		remove (filename);
 	}
 	return nbSecond;
@@ -228,7 +278,7 @@ wrtiing it in a file
 **/
 void writeStatus(int status){
   FILE *f;
-  f = fopen(filenameStatus, "a");
+  f = fopen(filenameStatus, "w");
   /** Only write status if the file exists **/
   if(f){
    fprintf(f, "%d", status);
