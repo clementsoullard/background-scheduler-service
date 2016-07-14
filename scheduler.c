@@ -6,7 +6,7 @@
 #include <string.h>
 #include "adc.h"
 #include "lcd.h"
- // #define PROD
+  #define PROD
 
 
 
@@ -69,7 +69,7 @@ int main (int argc, char** argv)
 			nbSecond=valueInFile;
 		}
 		/**
-		iF a pause is required.
+		if a pause is required.
 		**/
 		else if (valueInFile==PAUSE){
 			nbSecond=remainingSeconds;
@@ -87,9 +87,14 @@ int main (int argc, char** argv)
 		// The countdown
 		whenItsComplete = time(NULL)+nbSecond;
 		do {
-			cycle++;
+		/**
+		Increment only if not in pause (Cycle increments will be at the end of the cycle loop.
+		**/
+			if(state!=IS_PAUSE){
+				cycle++;
+			}
 			remainingSeconds=whenItsComplete-time(NULL);
-			if(remainingSeconds>-1){
+			if(remainingSeconds>-1||state==IS_PAUSE){
 				openRelay();
 				digitalWrite (TRANSISTOR, LOW);
 				int seconds=remainingSeconds%60;
@@ -99,7 +104,7 @@ int main (int argc, char** argv)
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
 				//printf("Reset LCD ? %d\n",cycle%5);
 				if(cycle%30==0){
-				resetLcd();
+				 resetLcd();
 				}
 				goHome();
 				lcd_text(timestr);
