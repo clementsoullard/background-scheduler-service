@@ -7,9 +7,7 @@
 #define LCD_D5 25
 #define LCD_D6 21
 #define LCD_D7 26
-#define RELAY_IN 7
-#define RELAY_IN2 1
-#define TRANSISTOR 27
+
 
 // LCD instructions 
 #define lcd_Clear 0b00000001 // replace all characters with ASCII 'space' 
@@ -29,4 +27,5 @@ void lcd_text(char *s);
 void lcd_init();
 void goHome();
 void resetLcd();
+void initPins();
 #endif

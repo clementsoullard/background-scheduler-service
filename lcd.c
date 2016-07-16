@@ -1,5 +1,6 @@
 #include <wiringPi.h>
 #include <stdio.h>
+#include "scheduler.h"
 #include "lcd.h"
 
 void pulseEnable ()
@@ -55,11 +56,10 @@ void lcd_text(char *s)
 	SetCmdMode();
 }
 /**
-Init the screen
+* Init GPIO PIN
 **/
-void lcd_init()
-{
-
+void initPins(){
+	wiringPiSetup () ; // use wiring Pi numbering
 	// set up pi pins for output
 	pinMode (LCD_E,  OUTPUT);
 	pinMode (LCD_RS, OUTPUT);
@@ -70,8 +70,15 @@ void lcd_init()
 	pinMode (RELAY_IN, OUTPUT);
 	pinMode (RELAY_IN2, OUTPUT);
 	pinMode (TRANSISTOR, OUTPUT);
-	//digitalWrite (RELAY_IN, HIGH) ;
-	// initialise LCD
+}
+/**
+Init the screen
+**/
+void lcd_init()
+{
+	#ifndef PROD
+	printf("Full reset LCD\n");
+	#endif
 	SetCmdMode(); // set for commands
 	lcd_byte(0x33); // full init
 	lcd_byte(0x32); // 4 bit mode
@@ -94,8 +101,13 @@ void goHome(){
  no matter the random interference that could happen from time to time.
  **/
 void resetLcd(){
+	#ifndef PROD
+	printf("Reset LCD\n");
+	#endif
+
 	SetCmdMode(); // set for commands
 	lcd_byte(0x0C); // display on, cursor off, blink off
 	lcd_byte(0x01);  // clear screen
-	delay(7);        // clear screen is slow!
+	delay(10);        // clear screen is slow!
+
 }

@@ -2,56 +2,41 @@
 #include <stdlib.h> 
 #include <wiringPi.h>
 #include <time.h>
+#include <unistd.h>
 #include <dirent.h>
 #include <string.h>
 #include "adc.h"
 #include "lcd.h"
-  #define PROD
-
-
-
-#define IS_CLOSED -1
-#define IS_OPEN 1
-#define IS_PAUSE 2
-
-#define TV_OFF -1
-#define TV_ON -2
-#define NO_FILE -3
-#define PAUSE -4
-#define RESUME -5
-
-/**
-The file name for the countdown
-**/
-char filename[]="/tmp/scheduler/CD";
-char filenameStatus[]="/tmp/scheduler/ST";
-void writeStatus(int status);
-
-#define ADC_CS 0
-#define ADC_CLK 4
-#define ADC_DIO 2
-
-
+#include "scheduler.h"
 
 
 /**
 * If the relay is open or not
 */
+
+time_t lastImmobileState=0;
+
+char filenameStatus[]="/home/clement/scheduler/work/ST";
+char filenameCountdown[]="/home/clement/scheduler/work/CD";
+char filenameStandby[]="/home/clement/scheduler/work/SB";
+char filenameLock[]="/home/clement/scheduler/work/LCK";
+char filenameRemaining[]="/home/clement/scheduler/work/REM";
+
 int state=0;
+int pauseSt=IS_RUNNING;
 
 /**
 * Program pooling a directory, and doing a scheduling.
 **/
 int main (int argc, char** argv)
 {
-	wiringPiSetup () ; // use wiring Pi numbering
+	initPins();
 	adc_init();
 	lcd_init();
+	writePid();
 	SetChrMode();
 	/** The status does not exist at the launch of the schduler prgram*/
-	remove (filenameStatus);
-
-
+	clearFile();
 	int nbSecond;
 	int remainingSeconds;
 	uchar intensity;
@@ -59,53 +44,80 @@ int main (int argc, char** argv)
     int i;
 	int valueInFile;
 	time_t whenItsComplete ;
-	char timestr[7];
+		char timestr[7];
 	pinMode (RELAY_IN, OUTPUT);
 	// Permanent loop checking file.
 	int cycle=0;
+	
+	
 	while(1){
 		valueInFile=getCoundownValue();
-		if(valueInFile>0||valueInFile>-4){
+		#ifndef PROD
+		printf("pause:%d,valueInFile:%d\n",pauseSt,valueInFile);
+		#endif
+	
+		if(valueInFile>=0){
 			nbSecond=valueInFile;
-		}
-		/**
-		if a pause is required.
-		**/
-		else if (valueInFile==PAUSE){
-			nbSecond=remainingSeconds;
-			/***
-			 * In case we are in pause, but not seconds are remaining, 
-			 * then we should remove the file. and set the status to noFile
-			**/
-			if(nbSecond==0){
-				remove (filename);
-				nbSecond=-3;
-			}else{
-				pauseRelay();
-			}
-		}
 		// The countdown
-		whenItsComplete = time(NULL)+nbSecond;
-		do {
-		/**
-		Increment only if not in pause (Cycle increments will be at the end of the cycle loop.
-		**/
-			if(state!=IS_PAUSE){
-				cycle++;
-			}
+			whenItsComplete = time(NULL)+nbSecond;
 			remainingSeconds=whenItsComplete-time(NULL);
-			if(remainingSeconds>-1||state==IS_PAUSE){
+		}
+		else{remainingSeconds=-1;}
+		#ifndef PROD
+		printf("nbsecond:%d\n",nbSecond);
+		#endif
+	
+	
+		do {
+	
+	   /**
+	   * Do a regular reset of the LCD
+	   **/
+		if(cycle%300==0){
+		 lcd_init();
+		}
+		else if(cycle%30==0){
+			resetLcd();
+		}
+		/**
+		* Write the remaining seconds
+		**/
+		if(cycle%60==0){
+		 writeRemaining(remainingSeconds);
+		}
+		
+
+		/**
+		* Increment only if not in pause (Cycle increments will be at the end of the cycle loop.
+		**/	
+
+		
+		updateStandbyStatus();
+		cycle++;
+
+		
+		
+		if(remainingSeconds>-1){
+		if(pauseSt==IS_RUNNING){
+				remainingSeconds=whenItsComplete-time(NULL);
+		}else{
+			    whenItsComplete=remainingSeconds+time(NULL);
+		}
+
+		sleep(1);
 				openRelay();
+				if(lastImmobileState==0||(time(NULL)-lastImmobileState)<NBSECONDBEFORECREENSHUTDOWN){
 				digitalWrite (TRANSISTOR, LOW);
+				}
+				else{
+				digitalWrite (TRANSISTOR, HIGH);
+				}
 				int seconds=remainingSeconds%60;
 				int hours=remainingSeconds/3600;
 				int minutes=remainingSeconds/60%60;
-				sleep(1);
+			
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
-				//printf("Reset LCD ? %d\n",cycle%5);
-				if(cycle%30==0){
-				 resetLcd();
-				}
+					
 				goHome();
 				lcd_text(timestr);
 				#ifndef PROD
@@ -121,50 +133,49 @@ int main (int argc, char** argv)
 				printf("Intensite: %d\n",intensity);
 				#endif
 			}
+			#ifndef PROD
+			printf("Remaining seconds %d,cycle=%d\n",remainingSeconds,cycle);
+			#endif
+
 	} while ( remainingSeconds>0&& !isFilePresent());
-		
+	
+		#ifndef PROD
+	//	printf("Sortie boucle décompte\n");
+		#endif
+			
 		/**
-		* Every 30 ccyle there is a full reset of the screen. Otherwise it is  light reset.
+		* Every 10 ccyle there is a full reset of the screen. Otherwise it is  light reset.
 		**/
-		
-		if(cycle%30==0){
+	
+		if(cycle%10==0){
 			lcd_init();
 		}
-		else if (cycle%10==0){
-		 resetLcd();
-		}
+		nbSecond=0;
 		/**
 		*
 		**/
-			if(nbSecond==NO_FILE){
-				goHome();
-				closeRelay();
-				//	printf("Remaining %d\n",remainingSeconds);			
-				digitalWrite (TRANSISTOR, HIGH);
-				lcd_text("Expire    " );
-				#ifndef PROD
-				printf("Expire\n");
-				#endif
-			}
-			else if(nbSecond==TV_ON){
+		if(valueInFile==NO_FILE){
+			goHome();
+			closeRelay();
+			digitalWrite (TRANSISTOR, HIGH);
+			lcd_text("Expire    " );
+			#ifndef PROD
+			printf("Expire\n");
+			#endif
+		}
+			else if(valueInFile==TV_ON){
+			goHome();
 			openRelay();
 			digitalWrite (TRANSISTOR, LOW);
-			lcd_init();
-			goHome();
 			lcd_text("Tele on      " );
 			}
-		else if(nbSecond==TV_OFF){
+		else if(valueInFile==TV_OFF){
+			goHome();
 			digitalWrite (TRANSISTOR, HIGH);
 			closeRelay();
-			lcd_init();
-			goHome();
 			lcd_text("Tele off      " );
 		}
-		else if(nbSecond==RESUME){
-			resumeRelay();
-		}
-			sleep(3);
-		cycle++;
+		sleep(3);
 	}
 }
 /**
@@ -172,12 +183,11 @@ Opens the relay
 **/
 int openRelay(){
 		if(state != IS_OPEN){
-			//pinMode (RELAY_IN, OUTPUT);
 			digitalWrite (RELAY_IN, LOW);
 			state = IS_OPEN;
-				#ifndef PROD
+			#ifndef PROD
 			printf("Open relay\n");
-				#endif
+			#endif
 			writeStatus(state);
 }
 		}
@@ -187,7 +197,6 @@ int openRelay(){
 
 int closeRelay(){
 		if(state != IS_CLOSED){
-		
 			//pinMode (RELAY_IN, OUTPUT);
 			digitalWrite (RELAY_IN, HIGH);
 			state = IS_CLOSED;
@@ -198,41 +207,12 @@ int closeRelay(){
 			}
 }
 
-/**
- * Pause the relay
-**/
-
-int pauseRelay(){
-		if(state != IS_PAUSE){
-			state = IS_PAUSE;
-				#ifndef PROD
-			printf("Pause relay\n");
-				#endif
-			writeStatus(state);
-			}
-}
-
-/**
- * Resume
-**/
-
-int resumeRelay(){
-		if(state == IS_PAUSE){
-			state = IS_OPEN;
-				#ifndef PROD
-			printf("Resume relay\n");
-				#endif
-			writeStatus(state);
-			}
-}
-
-
 
 /**
 * Check if file is present
 **/
 int isFilePresent(){
-	FILE * f=fopen (filename, "rb");
+	FILE * f=fopen (filenameCountdown, "rb");
 	return f!=0;
 }
 
@@ -241,12 +221,11 @@ Get coundown value.
 */
 int getCoundownValue(){
 	int nbSecond=-3;
-
 	// read the content of the file
 	char * buffer = 0;
 	long length;
 
-	FILE * f=fopen (filename, "rb");
+	FILE * f=fopen (filenameCountdown, "rb");
 
 	if (f)
 	{
@@ -262,27 +241,45 @@ int getCoundownValue(){
 		}
 		fclose (f);
 	}
-	#ifndef PROD
-		printf("valueInfile=%d\n",nbSecond);
-	#endif
 	/**
 	* It the status is resumed
 	*/
-	if(f&&nbSecond>=0||nbSecond==RESUME){
-	#ifndef PROD
-		printf("Remove file\n");
-	#endif
+	if(f){
+	
+		if(nbSecond>0){
 		lcd_init();
-		remove (filename);
+		remove (filenameCountdown);
+		}
 	}
+	
 	return nbSecond;
+
+}
+
+void updateStandbyStatus(){
+	/**
+	Checking is the counter is running or not
+	**/
+	FILE  * f=fopen (filenameStandby, "r");
+
+	if (f)
+	{
+	if(pauseSt!=IS_PAUSE){
+	  pauseSt=IS_PAUSE;
+	  lastImmobileState=time(NULL);
+	}
+	}else{
+	lastImmobileState=0;
+	pauseSt=IS_RUNNING;
+	}
+	
 }
 /**
 Say if the relay is opebn or closed t oan external application by 
 wrtiing it in a file
 **/
 void writeStatus(int status){
-  FILE *f;
+  FILE * f;
   f = fopen(filenameStatus, "w");
   /** Only write status if the file exists **/
   if(f){
@@ -290,3 +287,44 @@ void writeStatus(int status){
    fclose(f);
   }
 }
+
+/**
+Save the PID
+**/
+void writePid(){
+  int pid=getpid();
+   FILE *  f = fopen(filenameLock, "w");
+  /** Only write status if the file exists **/
+  if(f){
+   fprintf(f, "%d", pid);
+   fclose(f);
+  }
+}
+/**
+Save the seconds remaining
+**/
+void writeRemaining(int remainingSeconds){
+   FILE *  f = fopen(filenameRemaining, "w");
+  /** Only write status if the file exists **/
+  if(f){
+   fprintf(f, "%d", remainingSeconds);
+   fclose(f);
+  }
+}
+/**
+* Remove all the files.
+**/
+void clearFile(){
+remove(filenameStatus);
+remove(filenameCountdown);
+remove(filenameStandby);
+remove(filenameLock);
+}
+
+
+
+
+
+
+
+
