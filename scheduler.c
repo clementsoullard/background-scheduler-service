@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "adc.h"
 #include "lcd.h"
 #include "scheduler.h"
@@ -25,18 +27,25 @@ char filenameRemaining[]="/home/clement/scheduler/work/REM";
 int state=0;
 int pauseSt=IS_RUNNING;
 
+
+
 /**
 * Program pooling a directory, and doing a scheduling.
 **/
 int main (int argc, char** argv)
 {
+
 	initPins();
 	adc_init();
 	lcd_init();
-	writePid();
-	SetChrMode();
+	
 	/** The status does not exist at the launch of the schduler prgram*/
 	clearFile();
+	int pid=readPid();	
+	stopIfPidExists(pid);
+	writePid();
+	
+	SetChrMode();
 	int nbSecond;
 	int remainingSeconds;
 	uchar intensity;
@@ -44,7 +53,8 @@ int main (int argc, char** argv)
     int i;
 	int valueInFile;
 	time_t whenItsComplete ;
-		char timestr[7];
+	char timestr[7];
+	
 	pinMode (RELAY_IN, OUTPUT);
 	// Permanent loop checking file.
 	int cycle=0;
@@ -73,10 +83,10 @@ int main (int argc, char** argv)
 	   /**
 	   * Do a regular reset of the LCD
 	   **/
-		if(cycle%300==0){
+		if(cycle%500==0){
 		 lcd_init();
 		}
-		else if(cycle%30==0){
+		else if(cycle%60==0){
 			resetLcd();
 		}
 		/**
@@ -104,7 +114,7 @@ int main (int argc, char** argv)
 			    whenItsComplete=remainingSeconds+time(NULL);
 		}
 
-		sleep(1);
+
 				openRelay();
 				if(lastImmobileState==0||(time(NULL)-lastImmobileState)<NBSECONDBEFORECREENSHUTDOWN){
 				digitalWrite (TRANSISTOR, LOW);
@@ -123,7 +133,8 @@ int main (int argc, char** argv)
 				#ifndef PROD
 				printf("%s\n",timestr);
 				#endif
-	    }
+				sleep(1);
+		}
 			/**
 			* Block measuring intensity
 			*/
@@ -147,7 +158,7 @@ int main (int argc, char** argv)
 		* Every 10 ccyle there is a full reset of the screen. Otherwise it is  light reset.
 		**/
 	
-		if(cycle%10==0){
+		if(cycle%100==0){
 			lcd_init();
 		}
 		nbSecond=0;
@@ -183,7 +194,9 @@ Opens the relay
 **/
 int openRelay(){
 		if(state != IS_OPEN){
-			digitalWrite (RELAY_IN, LOW);
+#ifndef RELAY_DISABLED		
+	digitalWrite (RELAY_IN, LOW);
+#endif
 			state = IS_OPEN;
 			#ifndef PROD
 			printf("Open relay\n");
@@ -198,7 +211,9 @@ int openRelay(){
 int closeRelay(){
 		if(state != IS_CLOSED){
 			//pinMode (RELAY_IN, OUTPUT);
+#ifndef RELAY_DISABLED
 			digitalWrite (RELAY_IN, HIGH);
+#endif
 			state = IS_CLOSED;
 				#ifndef PROD
 			printf("Close relay\n");
@@ -255,7 +270,9 @@ int getCoundownValue(){
 	return nbSecond;
 
 }
-
+/**
+Read the standby status from the file.
+**/
 void updateStandbyStatus(){
 	/**
 	Checking is the counter is running or not
@@ -267,12 +284,13 @@ void updateStandbyStatus(){
 	if(pauseSt!=IS_PAUSE){
 	  pauseSt=IS_PAUSE;
 	  lastImmobileState=time(NULL);
-	}
+ 	}
+     fclose(f);
 	}else{
 	lastImmobileState=0;
 	pauseSt=IS_RUNNING;
 	}
-	
+
 }
 /**
 Say if the relay is opebn or closed t oan external application by 
@@ -318,13 +336,50 @@ void clearFile(){
 remove(filenameStatus);
 remove(filenameCountdown);
 remove(filenameStandby);
-remove(filenameLock);
 }
 
+/**
+Read the standby status from the file.
+**/
+int readPid(){
+       int pid=-1;
+        // read the content of the file
+        char * buffer = 0;
+        long length;
 
+        FILE * f=fopen (filenameLock, "rb");
 
+        if (f)
+        {
+                fseek (f, 0, SEEK_END);
+                length = ftell (f);
+                fseek (f, 0, SEEK_SET);
+                /** The buffer stor the content of the file */
+                buffer = malloc (length);
+                if (buffer)
+                {
+                        fread (buffer, 1, length, f);
+                        pid = atoi(buffer);
+                }
+                fclose (f);
+        }
+return pid;
 
+}
+/**
+* Stops the program execution, if the program is already running.
+**/
+int stopIfPidExists(int pid){
+	char fileproc[20];
+	sprintf(fileproc,"/proc/%d",pid);
+	struct stat s;
+	int err = stat(fileproc, &s);
 
-
-
+	if(-1 == err) {
+	}else{
+		printf("Le processus %s is existing. Exiting\n",fileproc);    
+		exit(1);
+	}
+	return 0;
+}
 

@@ -87,6 +87,7 @@ void lcd_init()
 	lcd_byte(0x01);  // clear screen
 	delay(10);        // clear screen is slow!
 }
+
 /*
 Return at the begining of the line
 */

@@ -7,7 +7,6 @@ Init the adc converter
 **/
 void adc_init()
 {
-printf("Initialisation adc");
 pinMode(ADC_CS, OUTPUT);
 pinMode(ADC_CLK, OUTPUT);
 }
