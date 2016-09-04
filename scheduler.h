@@ -1,7 +1,7 @@
 #ifndef SCHEDULER_H
 
 // This variable will cause the log not to be displayed
-//#define PROD
+#define PROD
 //#define RELAY_DISABLED
 
 #define IS_CLOSED -1
@@ -45,4 +45,5 @@ void writeStatus(int);
 void updateStandbyStatus();
 void initPins();
 int stopIfPidExists();
+int checkSecondLine();
 #endif

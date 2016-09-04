@@ -205,6 +205,11 @@ int main (int argc, char** argv)
 			closeRelay();
 			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele off");
 		}
+		checkSecondLine();
+		if(strlen(secondLine)>0){
+					lcdPosition (lcdHandle, 0, 1) ; lcdPuts (lcdHandle, secondLine);
+		}
+
 		sleep(3);
 	}
 }
@@ -241,26 +246,29 @@ int closeRelay(){
 			}
 }
 
-
-/**
-* Check if file is present
-**/
-int isFilePresent(){
-	FILE * f=fopen (filenameCountdown, "rb");
+int checkSecondLine(){
 	FILE * fSL=fopen (filenameSecondLine, "rb");
 	if(fSL){
 		fseek (fSL, 0, SEEK_END);
 		int length = ftell (fSL);
 		fseek (fSL, 0, SEEK_SET);
 		fread (secondLine, 1, length, fSL);
+		secondLine[length-1]=0;
+		#ifndef PROD
 		printf("Fichier secondLinePresent %s\n",secondLine);
+		#endif
 		fclose (fSL);
 		remove (filenameSecondLine);
 
-	}else{
-		printf("Fichier secondLinePresent %s n'existe pas\n",filenameSecondLine);
 	}
-	
+}
+
+/**
+* Check if file is present
+**/
+int isFilePresent(){
+	FILE * f=fopen (filenameCountdown, "rb");
+	checkSecondLine();
 	return f!=0;
 }
 
@@ -423,12 +431,6 @@ int stopIfPidExists(int pid){
 void initPins(){
 	wiringPiSetup () ; // use wiring Pi numbering
 	// set up pi pins for output
-//	pinMode (LCD_E,  OUTPUT);
-//	pinMode (LCD_RS, OUTPUT);
-//	pinMode (LCD_D4, OUTPUT);
-//	pinMode (LCD_D5, OUTPUT);
-//	pinMode (LCD_D6, OUTPUT);
-//	pinMode (LCD_D7, OUTPUT);
 	pinMode (RELAY_IN, OUTPUT);
 	pinMode (RELAY_IN2, OUTPUT);
 	pinMode (TRANSISTOR, OUTPUT);
