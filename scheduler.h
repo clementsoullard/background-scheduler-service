@@ -1,7 +1,7 @@
 #ifndef SCHEDULER_H
 
 // This variable will cause the log not to be displayed
-#define PROD
+//#define PROD
 //#define RELAY_DISABLED
 
 #define IS_CLOSED -1
@@ -27,11 +27,22 @@
 #define RELAY_IN2 1
 #define TRANSISTOR 27
 
+#define LCD_E 23
+#define LCD_RS 22
+#define LCD_D4 24
+#define LCD_D5 25
+#define LCD_D6 21
+#define LCD_D7 26
+#define NB_COL 16
+#define NB_ROW 2
+
+
 void clearFile();
 int readPid();
 void writePid();
 void writeRemaining(int);
 void writeStatus(int);
 void updateStandbyStatus();
+void initPins();
 int stopIfPidExists();
 #endif

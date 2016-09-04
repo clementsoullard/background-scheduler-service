@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "adc.h"
-#include "lcd.h"
+#include <lcd.h>
 #include "scheduler.h"
 
 
@@ -23,9 +23,13 @@ char filenameCountdown[]="/home/clement/scheduler/work/CD";
 char filenameStandby[]="/home/clement/scheduler/work/SB";
 char filenameLock[]="/home/clement/scheduler/work/LCK";
 char filenameRemaining[]="/home/clement/scheduler/work/REM";
+char filenameSecondLine[]="/home/clement/scheduler/work/SL";
+
+char secondLine[100];
 
 int state=0;
 int pauseSt=IS_RUNNING;
+static int lcdHandle ;
 
 
 
@@ -37,15 +41,21 @@ int main (int argc, char** argv)
 
 	initPins();
 	adc_init();
-	lcd_init();
-	
+	lcdHandle = lcdInit (NB_ROW, NB_COL, 4, LCD_RS,LCD_E, LCD_D4, LCD_D5, LCD_D6, LCD_D7,0,0,0,0) ;
+	  if (lcdHandle < 0)
+  {
+    fprintf (stderr, "%s: lcdInit failed\n", argv [0]) ;
+    return -1 ;
+  }
+	lcdClear    (lcdHandle) ;
+
 	/** The status does not exist at the launch of the schduler prgram*/
 	clearFile();
+	strcpy(secondLine, "") ;
 	int pid=readPid();	
 	stopIfPidExists(pid);
 	writePid();
 	
-	SetChrMode();
 	int nbSecond;
 	int remainingSeconds;
 	uchar intensity;
@@ -84,10 +94,14 @@ int main (int argc, char** argv)
 	   * Do a regular reset of the LCD
 	   **/
 		if(cycle%500==0){
-		 lcd_init();
+			lcdClear    (lcdHandle) ;
+
+		// lcd_init();
 		}
 		else if(cycle%60==0){
-			resetLcd();
+			lcdClear    (lcdHandle) ;
+
+		//	resetLcd();
 		}
 		/**
 		* Write the remaining seconds
@@ -128,8 +142,11 @@ int main (int argc, char** argv)
 			
 				sprintf(timestr,"%02d:%02d:%02d",hours,minutes,seconds);
 					
-				goHome();
-				lcd_text(timestr);
+			//	goHome();
+				  lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, timestr);
+				if(strlen(secondLine)>0){
+					lcdPosition (lcdHandle, 0, 1) ; lcdPuts (lcdHandle, secondLine);
+				}
 				#ifndef PROD
 				printf("%s\n",timestr);
 				#endif
@@ -159,32 +176,34 @@ int main (int argc, char** argv)
 		**/
 	
 		if(cycle%100==0){
-			lcd_init();
+			lcdClear    (lcdHandle) ;
+
+		//	lcd_init();
 		}
 		nbSecond=0;
 		/**
 		*
 		**/
 		if(valueInFile==NO_FILE){
-			goHome();
+		//	goHome();
 			closeRelay();
 			digitalWrite (TRANSISTOR, HIGH);
-			lcd_text("Expire    " );
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Expire");
 			#ifndef PROD
 			printf("Expire\n");
 			#endif
 		}
 			else if(valueInFile==TV_ON){
-			goHome();
+			//goHome();
 			openRelay();
 			digitalWrite (TRANSISTOR, LOW);
-			lcd_text("Tele on      " );
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele on");
 			}
 		else if(valueInFile==TV_OFF){
-			goHome();
+			//goHome();
 			digitalWrite (TRANSISTOR, HIGH);
 			closeRelay();
-			lcd_text("Tele off      " );
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele off");
 		}
 		sleep(3);
 	}
@@ -228,6 +247,20 @@ int closeRelay(){
 **/
 int isFilePresent(){
 	FILE * f=fopen (filenameCountdown, "rb");
+	FILE * fSL=fopen (filenameSecondLine, "rb");
+	if(fSL){
+		fseek (fSL, 0, SEEK_END);
+		int length = ftell (fSL);
+		fseek (fSL, 0, SEEK_SET);
+		fread (secondLine, 1, length, fSL);
+		printf("Fichier secondLinePresent %s\n",secondLine);
+		fclose (fSL);
+		remove (filenameSecondLine);
+
+	}else{
+		printf("Fichier secondLinePresent %s n'existe pas\n",filenameSecondLine);
+	}
+	
 	return f!=0;
 }
 
@@ -262,7 +295,7 @@ int getCoundownValue(){
 	if(f){
 	
 		if(nbSecond>0){
-		lcd_init();
+	//	lcd_init();
 		remove (filenameCountdown);
 		}
 	}
@@ -383,3 +416,20 @@ int stopIfPidExists(int pid){
 	return 0;
 }
 
+
+/**
+* Init GPIO PIN
+**/
+void initPins(){
+	wiringPiSetup () ; // use wiring Pi numbering
+	// set up pi pins for output
+//	pinMode (LCD_E,  OUTPUT);
+//	pinMode (LCD_RS, OUTPUT);
+//	pinMode (LCD_D4, OUTPUT);
+//	pinMode (LCD_D5, OUTPUT);
+//	pinMode (LCD_D6, OUTPUT);
+//	pinMode (LCD_D7, OUTPUT);
+	pinMode (RELAY_IN, OUTPUT);
+	pinMode (RELAY_IN2, OUTPUT);
+	pinMode (TRANSISTOR, OUTPUT);
+};

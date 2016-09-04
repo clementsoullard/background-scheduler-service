@@ -2,8 +2,8 @@ prefix=/usr/local
 
 all: scheduler
 	
-scheduler: scheduler.o adc.o lcd.o
-	$(CXX) $+ -o $@ -lwiringPi
+scheduler: scheduler.o adc.o
+	$(CXX) $+ -o $@ -lwiringPi -lwiringPiDev  -lpthread -lm
 
 install: scheduler
 	install -m 755 scheduler $(prefix)/bin
