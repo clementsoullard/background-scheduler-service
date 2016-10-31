@@ -93,21 +93,20 @@ int main (int argc, char** argv)
 	   /**
 	   * Do a regular reset of the LCD
 	   **/
-		if(cycle%500==0){
+		if(cycle%1000==0){
+			 lcdDisplay     (lcdHandle, TRUE) ;
+			lcdCursor      (lcdHandle, FALSE) ;
+			lcdCursorBlink (lcdHandle, FALSE) ;
 			lcdClear    (lcdHandle) ;
-
-		// lcd_init();
 		}
 		else if(cycle%60==0){
 			lcdClear    (lcdHandle) ;
-
-		//	resetLcd();
 		}
 		/**
 		* Write the remaining seconds
 		**/
 		if(cycle%60==0){
-		 writeRemaining(remainingSeconds);
+			writeRemaining(remainingSeconds);
 		}
 		
 
@@ -155,12 +154,12 @@ int main (int argc, char** argv)
 			/**
 			* Block measuring intensity
 			*/
-			if(cycle%20==0){
+			/*if(cycle%20==0){
 				intensity=get_ADC_Result();
 				#ifndef PROD
 				printf("Intensite: %d\n",intensity);
 				#endif
-			}
+			}*/
 			#ifndef PROD
 			printf("Remaining seconds %d,cycle=%d\n",remainingSeconds,cycle);
 			#endif
@@ -176,38 +175,35 @@ int main (int argc, char** argv)
 		**/
 	
 		if(cycle%100==0){
-			lcdClear    (lcdHandle) ;
+			lcdClear  (lcdHandle) ;
 
-		//	lcd_init();
 		}
 		nbSecond=0;
 		/**
 		*
 		**/
 		if(valueInFile==NO_FILE){
-		//	goHome();
-			closeRelay();
+				closeRelay();
 			digitalWrite (TRANSISTOR, HIGH);
-			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Expire");
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Expire         ");
 			#ifndef PROD
 			printf("Expire\n");
 			#endif
 		}
 			else if(valueInFile==TV_ON){
-			//goHome();
-			openRelay();
+				openRelay();
 			digitalWrite (TRANSISTOR, LOW);
-			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele on");
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele on         ");
 			}
 		else if(valueInFile==TV_OFF){
-			//goHome();
 			digitalWrite (TRANSISTOR, HIGH);
 			closeRelay();
-			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele off");
+			lcdPosition (lcdHandle, 0, 0) ; lcdPuts (lcdHandle, "Tele off        ");
 		}
 		checkSecondLine();
 		if(strlen(secondLine)>0){
-					lcdPosition (lcdHandle, 0, 1) ; lcdPuts (lcdHandle, secondLine);
+					lcdPosition (lcdHandle, 0, 1) ;
+					lcdPuts (lcdHandle, secondLine);
 		}
 
 		sleep(3);
