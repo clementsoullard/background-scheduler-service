@@ -222,7 +222,7 @@ int openRelay(){
 			#ifndef PROD
 			printf("Open relay\n");
 			#endif
-			writeStatus(state);
+//			writeStatus(state);
 }
 		}
 /**
@@ -239,7 +239,7 @@ int closeRelay(){
 				#ifndef PROD
 			printf("Close relay\n");
 				#endif
-			writeStatus(state);
+//			writeStatus(state);
 			}
 }
 
