@@ -31,7 +31,8 @@ int state=0;
 int pauseSt=IS_RUNNING;
 static int lcdHandle ;
 
-
+int remainingSecondsOld;
+ 
 
 /**
 * Program pooling a directory, and doing a scheduling.
@@ -359,12 +360,19 @@ void writePid(){
 Save the seconds remaining
 **/
 void writeRemaining(int remainingSeconds){
+/*
+Nothing is written if the number of second has not changed
+*/
+if(remainingSeconds==remainingSecondsOld){
+return;
+}
    FILE *  f = fopen(filenameRemaining, "w");
   /** Only write status if the file exists **/
   if(f){
    fprintf(f, "%d", remainingSeconds);
    fclose(f);
   }
+remainingSecondsOld=remainingSeconds;
 }
 /**
 * Remove all the files.
